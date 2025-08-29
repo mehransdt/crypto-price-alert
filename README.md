@@ -172,6 +172,41 @@ docker-compose down
 - **app**: Main application container
 - **watchtower**: Automatic container updates (optional)
 
+## 👤 User Management Commands
+
+### Creating New Users
+
+You can create new users directly from the command line using the provided script.
+
+#### Using Docker Compose
+```bash
+# Create a new user with command-line arguments
+docker-compose exec crypto-monitor node create-user.js username password
+
+# Example:
+docker-compose exec crypto-monitor node create-user.js johndoe securepass123
+```
+
+#### Without Docker Compose
+```bash
+# Create a new user with command-line arguments
+node create-user.js username password
+
+# Example:
+node create-user.js alice mypassword456
+```
+
+### User Creation Options
+- **Required Arguments**: Provide username and password as command-line arguments
+- **Validation**: Username must be unique and password must be provided
+- **Security**: Passwords are automatically hashed using bcrypt
+
+### Verifying User Creation
+After creating a user, you can verify it was created successfully by:
+1. Checking the console output for success message
+2. Logging into the web dashboard with the new credentials
+3. Using the login API endpoint: `POST /api/auth/login`
+
 ## 🔐 Security Features
 
 - **Password Hashing**: bcrypt for secure password storage
