@@ -1,0 +1,26 @@
+{
+  "name": "crypto-monitor",
+  "version": "1.0.0",
+  "description": "Crypto price monitoring application with alerts",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "axios": "^1.4.0",
+    "node-telegram-bot-api": "^0.64.0",
+    "socks-proxy-agent": "^8.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["crypto", "monitoring", "price", "alerts"],
+  "author": "Crypto Monitor",
+  "license": "MIT"
+}

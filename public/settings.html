@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Monitor - Settings</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Settings</h1>
+            <div class="user-info">
+                <span id="username"></span>
+                <a href="/dashboard">Dashboard</a>
+                <a href="#" id="logoutBtn">Logout</a>
+            </div>
+        </header>
+
+        <div class="settings-content">
+            <div class="settings-form">
+                <h2>Telegram Settings</h2>
+                <form id="settingsForm">
+                    <div class="form-group">
+                        <label for="telegramUsername">Telegram Username</label>
+                        <input type="text" id="telegramUsername" name="telegramUsername" placeholder="Enter your Telegram username">
+                        <small>Enter your Telegram username to receive alerts</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Connect to Telegram Bot</label>
+                        <p>To receive alerts on Telegram, please message <a href="https://t.me/your_bot_username" target="_blank">@your_bot_username</a> on Telegram and send the command <strong>/start</strong>.</p>
+                        <p id="telegramStatus">Status: Not connected</p>
+                    </div>
+                    <button type="submit" class="btn-primary">Save Settings</button>
+                    <div id="message" class="message"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('token');
+
+        // Check if user is logged in
+        if (!token) {
+            window.location.href = '/';
+        }
+
+        // Set username
+        document.getElementById('username').textContent = localStorage.getItem('username');
+
+        // Logout functionality
+        document.getElementById('logoutBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            window.location.href = '/';
+        });
+
+        // Load current settings
+        const loadSettings = async () => {
+            try {
+                const response = await fetch('/api/settings', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const settings = await response.json();
+                document.getElementById('telegramUsername').value = settings.telegram_username || '';
+                
+                // Check if user has connected to Telegram bot
+                if (settings.telegram_chat_id) {
+                    document.getElementById('telegramStatus').textContent = 'Status: Connected to Telegram';
+                    document.getElementById('telegramStatus').style.color = 'green';
+                } else {
+                    document.getElementById('telegramStatus').textContent = 'Status: Not connected to Telegram';
+                    document.getElementById('telegramStatus').style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        };
+
+        // Handle form submission
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const telegramUsername = document.getElementById('telegramUsername').value;
+            const messageElement = document.getElementById('message');
+            
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ telegram_username: telegramUsername })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageElement.textContent = 'Settings saved successfully!';
+                    messageElement.className = 'message success';
+                } else {
+                    messageElement.textContent = 'Error: ' + data.message;
+                    messageElement.className = 'message error';
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                messageElement.textContent = 'An error occurred. Please try again.';
+                messageElement.className = 'message error';
+            }
+        });
+
+        // Initial load
+        loadSettings();
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+services:
+  crypto-monitor:
+    build: .
+    container_name: crypto-monitor
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+    volumes:
+      - crypto_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  crypto_data:
+    driver: local
