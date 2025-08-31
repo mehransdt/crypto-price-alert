@@ -17,21 +17,25 @@
             </div>
         </header>
 
-        <div class="dashboard-content">
-            <div class="alerts-section">
-                <h2>Your Alerts</h2>
-                <button id="addAlertBtn" class="btn-primary">Add New Alert</button>
-                <div id="alertsList" class="alerts-list"></div>
+        <!-- Coin Search Section at Top -->
+        <div class="coin-search-section">
+            <h2>Add New Alert</h2>
+            <div class="search-container">
+                <input type="text" id="coinSearch" placeholder="Search for a cryptocurrency...">
+                <button id="searchBtn">Search</button>
             </div>
+            <div id="searchResults" class="search-results"></div>
+        </div>
 
-            <div class="coins-section">
-                <h2>Top Cryptocurrencies</h2>
-                <div class="search-container">
-                    <input type="text" id="coinSearch" placeholder="Search for a cryptocurrency...">
-                    <button id="searchBtn">Search</button>
+        <!-- Your Alerts Section -->
+        <div class="alerts-main-section">
+            <div class="alerts-header">
+                <h2>Your Alerts</h2>
+                <div class="alerts-search-container">
+                    <input type="text" id="alertSearch" placeholder="Search your alerts...">
                 </div>
-                <div id="coinsList" class="coins-list"></div>
             </div>
+            <div id="alertsList" class="alerts-list"></div>
         </div>
     </div>
 
@@ -51,18 +55,18 @@
                     <label for="currentPrice">Current Price (USD)</label>
                     <input type="text" id="currentPrice" readonly>
                 </div>
-                <div class="form-group">
-                    <label for="targetPrice">Profit Target (USD)</label>
-                    <input type="number" id="targetPrice" step="0.01" required>
+                
+                <!-- Target Prices Section -->
+                <div class="targets-section">
+                    <div class="targets-header">
+                        <label>Target Prices</label>
+                        <button type="button" id="addTargetBtn" class="btn-add-target">+ Add Target</button>
+                    </div>
+                    <div id="targetsList" class="targets-list">
+                        <!-- Target rows will be added here dynamically -->
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="lossLimit">Loss Limit (USD)</label>
-                    <input type="number" id="lossLimit" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label for="tolerance">Tolerance (%)</label>
-                    <input type="number" id="tolerance" step="0.1" min="0" max="100" required>
-                </div>
+                
                 <button type="submit" class="btn-primary">Save Alert</button>
             </form>
         </div>
@@ -71,6 +75,7 @@
     <script>
         let token = localStorage.getItem('token');
         let selectedCoin = null;
+        let alertTargets = [];
 
         // Check if user is logged in
         if (!token) {
@@ -109,25 +114,48 @@
             const alertsList = document.getElementById('alertsList');
             
             if (alerts.length === 0) {
-                alertsList.innerHTML = '<p>No alerts set up yet.</p>';
+                alertsList.innerHTML = '<p class="no-alerts">No alerts set up yet. Use the search above to add your first alert!</p>';
                 return;
             }
             
             alertsList.innerHTML = alerts.map(alert => {
-                const profitStatus = alert.profit_triggered ? '✅ Profit Target Hit' : '⏳ Waiting';
-                const lossStatus = alert.loss_limit && alert.loss_triggered ? '❌ Loss Limit Hit' : (alert.loss_limit ? '⏳ Waiting' : '➖ Not Set');
-                const alertClass = (alert.profit_triggered || alert.loss_triggered) ? 'alert-item triggered' : 'alert-item';
+                const triggeredTargets = alert.targets.filter(t => t.is_triggered).length;
+                const totalTargets = alert.targets.length;
+                const alertClass = triggeredTargets > 0 ? 'alert-item triggered' : 'alert-item';
+                
+                const targetsHtml = alert.targets.map(target => {
+                    const statusIcon = target.is_triggered ? '✅' : '⏳';
+                    const alertTypeMap = {
+                        'profit target': 'هدف سود',
+                        'loss limit': 'حد ضرر',
+                        'watch market': 'نظارت بازار',
+                        'target raised': 'افزایش هدف',
+                        'market down': 'کاهش بازار',
+                        'market up': 'افزایش بازار'
+                    };
+                    const alertTypeText = alertTypeMap[target.alert_type] || target.alert_type;
+                    
+                    return `
+                        <div class="target-row ${target.is_triggered ? 'triggered' : ''}">
+                            <span class="target-info">
+                                ${statusIcon} $${target.target_price} - ${alertTypeText} (±${target.tolerance}%)
+                            </span>
+                            ${target.triggered_at ? `<span class="trigger-time">${new Date(target.triggered_at).toLocaleString('fa-IR')}</span>` : ''}
+                        </div>
+                    `;
+                }).join('');
                 
                 return `
                     <div class="${alertClass}">
                         <div class="alert-info">
                             <h3>${alert.coin_name} (${alert.coin_symbol.toUpperCase()})</h3>
-                            <p>📈 Profit Target: $${alert.target_price} ±${alert.tolerance}% - ${profitStatus}</p>
-                            ${alert.loss_limit ? `<p>📉 Loss Limit: $${alert.loss_limit} ±${alert.tolerance}% - ${lossStatus}</p>` : '<p>📉 Loss Limit: Not Set</p>'}
-                            <p>💰 Current: <span id="current-${alert.coin_id}">Loading...</span></p>
+                            <div class="targets-display">
+                                ${targetsHtml}
+                            </div>
+                            <p class="alert-status">💰 Current: <span id="current-${alert.coin_id}">Loading...</span> | Targets: ${triggeredTargets}/${totalTargets} triggered</p>
                         </div>
                         <div class="alert-actions">
-                            <button class="btn-edit" data-id="${alert.id}" data-coin="${alert.coin_id}" data-target="${alert.target_price}" data-tolerance="${alert.tolerance}">Edit</button>
+                            <button class="btn-edit" data-alert='${JSON.stringify(alert)}'>Edit</button>
                             <button class="btn-delete" data-id="${alert.id}">Delete</button>
                         </div>
                     </div>
@@ -137,16 +165,8 @@
             // Add event listeners for edit and delete buttons
             document.querySelectorAll('.btn-edit').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    const coinId = e.target.dataset.coin;
-                    const targetPrice = e.target.dataset.target;
-                    const tolerance = e.target.dataset.tolerance;
-                    
-                    // Find the alert in the list
-                    const alert = alerts.find(a => a.id == id);
-                    if (alert) {
-                        openAlertModal(alert);
-                    }
+                    const alert = JSON.parse(e.target.dataset.alert);
+                    openAlertModal(alert);
                 });
             });
             
@@ -163,6 +183,24 @@
             });
         };
 
+        // Filter alerts based on search
+        const filterAlerts = (searchTerm) => {
+            const alertItems = document.querySelectorAll('.alert-item');
+            alertItems.forEach(item => {
+                const coinName = item.querySelector('h3').textContent.toLowerCase();
+                if (coinName.includes(searchTerm.toLowerCase())) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        };
+
+        // Alert search functionality
+        document.getElementById('alertSearch').addEventListener('input', (e) => {
+            filterAlerts(e.target.value);
+        });
+
         // Load current price for a coin
         const loadCurrentPrice = async (coinId, elementId) => {
             try {
@@ -178,199 +216,6 @@
                 document.getElementById(elementId).textContent = 'Error';
             }
         };
-
-        // Load top coins
-        const loadCoins = async () => {
-            try {
-                const response = await fetch('/api/coins', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                const coins = await response.json();
-                displayCoins(coins);
-            } catch (error) {
-                console.error('Error loading coins:', error);
-            }
-        };
-
-        // Display coins
-        const displayCoins = (coins) => {
-            const coinsList = document.getElementById('coinsList');
-            
-            coinsList.innerHTML = coins.map(coin => `
-                <div class="coin-item">
-                    <img src="${coin.image}" alt="${coin.name}" width="24" height="24">
-                    <div class="coin-info">
-                        <h3>${coin.name} (${coin.symbol.toUpperCase()})</h3>
-                        <p>Price: $${coin.current_price}</p>
-                    </div>
-                    <button class="btn-add-alert" data-coin='${JSON.stringify(coin)}'>Add Alert</button>
-                </div>
-            `).join('');
-            
-            // Add event listeners for add alert buttons
-            document.querySelectorAll('.btn-add-alert').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const coin = JSON.parse(e.target.dataset.coin);
-                    openAlertModal(null, coin);
-                });
-            });
-        };
-
-        // Open alert modal
-        const openAlertModal = async (alert = null, coin = null) => {
-            const modal = document.getElementById('alertModal');
-            const modalTitle = document.getElementById('modalTitle');
-            const alertForm = document.getElementById('alertForm');
-            
-            if (alert) {
-                // Edit mode
-                modalTitle.textContent = 'Edit Alert';
-                document.getElementById('alertId').value = alert.id;
-                document.getElementById('coinId').value = alert.coin_id;
-                document.getElementById('coinName').value = `${alert.coin_name} (${alert.coin_symbol.toUpperCase()})`;
-                document.getElementById('currentPrice').value = 'Loading...';
-                document.getElementById('targetPrice').value = alert.target_price;
-                document.getElementById('lossLimit').value = alert.loss_limit || '';
-                document.getElementById('tolerance').value = alert.tolerance;
-                
-                // Load current price for edit mode
-                try {
-                    const priceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${alert.coin_id}&vs_currencies=usd`);
-                    const priceData = await priceResponse.json();
-                    const currentPrice = priceData[alert.coin_id]?.usd;
-                    
-                    if (currentPrice !== undefined) {
-                        document.getElementById('currentPrice').value = `$${currentPrice}`;
-                    } else {
-                        document.getElementById('currentPrice').value = 'Error loading price';
-                    }
-                } catch (error) {
-                    console.error('Error fetching current price:', error);
-                    document.getElementById('currentPrice').value = 'Error loading price';
-                }
-            } else if (coin) {
-                // Add mode
-                modalTitle.textContent = 'Add New Alert';
-                document.getElementById('alertId').value = '';
-                document.getElementById('coinId').value = coin.id;
-                document.getElementById('coinName').value = `${coin.name} (${coin.symbol.toUpperCase()})`;
-                document.getElementById('currentPrice').value = `$${coin.current_price}`;
-                document.getElementById('targetPrice').value = '';
-                document.getElementById('lossLimit').value = '';
-                document.getElementById('tolerance').value = '';
-            }
-            
-            modal.style.display = 'block';
-        };
-
-        // Close modal
-        document.querySelector('.close').addEventListener('click', () => {
-            document.getElementById('alertModal').style.display = 'none';
-        });
-
-        // Close modal when clicking outside
-        window.addEventListener('click', (e) => {
-            const modal = document.getElementById('alertModal');
-            if (e.target === modal) {
-                modal.style.display = 'none';
-            }
-        });
-
-        // Handle alert form submission
-        document.getElementById('alertForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const alertId = document.getElementById('alertId').value;
-            const coinId = document.getElementById('coinId').value;
-            const coinName = document.getElementById('coinName').value.split(' (')[0];
-            const coinSymbol = document.getElementById('coinName').value.split(' (')[1].split(')')[0];
-            const targetPrice = document.getElementById('targetPrice').value;
-            const lossLimit = document.getElementById('lossLimit').value;
-            const tolerance = document.getElementById('tolerance').value;
-            
-            try {
-                let response;
-                if (alertId) {
-                    // Update existing alert
-                    response = await fetch(`/api/alerts/${alertId}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({ 
-                            target_price: targetPrice, 
-                            loss_limit: lossLimit || null,
-                            tolerance 
-                        })
-                    });
-                } else {
-                    // Create new alert
-                    response = await fetch('/api/alerts', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({ 
-                            coin_id: coinId,
-                            coin_name: coinName,
-                            coin_symbol: coinSymbol,
-                            target_price: targetPrice,
-                            loss_limit: lossLimit || null,
-                            tolerance
-                        })
-                    });
-                }
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    document.getElementById('alertModal').style.display = 'none';
-                    loadAlerts(); // Refresh alerts list
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error saving alert:', error);
-                alert('An error occurred. Please try again.');
-            }
-        });
-
-        // Delete alert
-        const deleteAlert = async (id) => {
-            if (!confirm('Are you sure you want to delete this alert?')) {
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/alerts/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    loadAlerts(); // Refresh alerts list
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            } catch (error) {
-                console.error('Error deleting alert:', error);
-                alert('An error occurred. Please try again.');
-            }
-        };
-
-        // Add alert button
-        document.getElementById('addAlertBtn').addEventListener('click', () => {
-            openAlertModal();
-        });
 
         // Search coins
         document.getElementById('searchBtn').addEventListener('click', async () => {
@@ -391,17 +236,17 @@
                 alert('Error searching coins');
             }
         });
-        
+
         // Display search results
         const displaySearchResults = (coins) => {
-            const coinsList = document.getElementById('coinsList');
+            const searchResults = document.getElementById('searchResults');
             
             if (coins.length === 0) {
-                coinsList.innerHTML = '<p>No coins found.</p>';
+                searchResults.innerHTML = '<p>No coins found.</p>';
                 return;
             }
             
-            coinsList.innerHTML = coins.map(coin => `
+            searchResults.innerHTML = coins.map(coin => `
                 <div class="coin-item">
                     <img src="${coin.large}" alt="${coin.name}" width="24" height="24">
                     <div class="coin-info">
@@ -440,9 +285,258 @@
             });
         };
 
+        // Add target row
+        const addTargetRow = (target = null) => {
+            const targetsList = document.getElementById('targetsList');
+            const targetIndex = alertTargets.length;
+            
+            const targetData = target || {
+                target_price: '',
+                alert_type: 'profit target',
+                tolerance: 1.0
+            };
+            
+            alertTargets.push(targetData);
+            
+            const targetRow = document.createElement('div');
+            targetRow.className = 'target-row';
+            targetRow.innerHTML = `
+                <div class="target-inputs">
+                    <input type="number" class="target-price" placeholder="Target Price" step="0.01" value="${targetData.target_price}" required>
+                    <select class="alert-type">
+                        <option value="profit target" ${targetData.alert_type === 'profit target' ? 'selected' : ''}>Profit Target</option>
+                        <option value="loss limit" ${targetData.alert_type === 'loss limit' ? 'selected' : ''}>Loss Limit</option>
+                        <option value="watch market" ${targetData.alert_type === 'watch market' ? 'selected' : ''}>Watch Market</option>
+                        <option value="target raised" ${targetData.alert_type === 'target raised' ? 'selected' : ''}>Target Raised</option>
+                        <option value="market down" ${targetData.alert_type === 'market down' ? 'selected' : ''}>Market Down</option>
+                        <option value="market up" ${targetData.alert_type === 'market up' ? 'selected' : ''}>Market Up</option>
+                    </select>
+                    <input type="number" class="tolerance" placeholder="Tolerance %" step="0.1" min="0" max="100" value="${targetData.tolerance}" required>
+                    <button type="button" class="btn-remove-target" data-index="${targetIndex}">×</button>
+                </div>
+            `;
+            
+            targetsList.appendChild(targetRow);
+            
+            // Add remove functionality
+            targetRow.querySelector('.btn-remove-target').addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                alertTargets.splice(index, 1);
+                targetRow.remove();
+                updateTargetIndices();
+            });
+        };
+
+        // Update target indices after removal
+        const updateTargetIndices = () => {
+            const removeButtons = document.querySelectorAll('.btn-remove-target');
+            removeButtons.forEach((btn, index) => {
+                btn.dataset.index = index;
+            });
+        };
+
+        // Add target button functionality
+        document.getElementById('addTargetBtn').addEventListener('click', () => {
+            addTargetRow();
+        });
+
+        // Open alert modal
+        const openAlertModal = async (alert = null, coin = null) => {
+            const modal = document.getElementById('alertModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const targetsList = document.getElementById('targetsList');
+            
+            // Clear previous targets
+            targetsList.innerHTML = '';
+            alertTargets = [];
+            
+            if (alert) {
+                // Edit mode
+                modalTitle.textContent = 'Edit Alert';
+                document.getElementById('alertId').value = alert.id;
+                document.getElementById('coinId').value = alert.coin_id;
+                document.getElementById('coinName').value = `${alert.coin_name} (${alert.coin_symbol.toUpperCase()})`;
+                document.getElementById('currentPrice').value = 'Loading...';
+                
+                // Add existing targets
+                alert.targets.forEach(target => {
+                    addTargetRow(target);
+                });
+                
+                // If no targets, add one empty target
+                if (alert.targets.length === 0) {
+                    addTargetRow();
+                }
+                
+                // Load current price for edit mode
+                try {
+                    const priceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${alert.coin_id}&vs_currencies=usd`);
+                    const priceData = await priceResponse.json();
+                    const currentPrice = priceData[alert.coin_id]?.usd;
+                    
+                    if (currentPrice !== undefined) {
+                        document.getElementById('currentPrice').value = `$${currentPrice}`;
+                    } else {
+                        document.getElementById('currentPrice').value = 'Error loading price';
+                    }
+                } catch (error) {
+                    console.error('Error fetching current price:', error);
+                    document.getElementById('currentPrice').value = 'Error loading price';
+                }
+            } else if (coin) {
+                // Add mode
+                modalTitle.textContent = 'Add New Alert';
+                document.getElementById('alertId').value = '';
+                document.getElementById('coinId').value = coin.id;
+                document.getElementById('coinName').value = `${coin.name} (${coin.symbol.toUpperCase()})`;
+                document.getElementById('currentPrice').value = `$${coin.current_price}`;
+                
+                // Add one empty target
+                addTargetRow();
+            }
+            
+            modal.style.display = 'block';
+        };
+
+        // Close modal
+        document.querySelector('.close').addEventListener('click', () => {
+            document.getElementById('alertModal').style.display = 'none';
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('alertModal');
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        // Handle alert form submission
+        document.getElementById('alertForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            console.log('Form submitted'); // Debug log
+            
+            const alertId = document.getElementById('alertId').value;
+            const coinId = document.getElementById('coinId').value;
+            const coinName = document.getElementById('coinName').value.split(' (')[0];
+            const coinSymbol = document.getElementById('coinName').value.split(' (')[1].split(')')[0];
+            
+            console.log('Alert data:', { alertId, coinId, coinName, coinSymbol }); // Debug log
+            
+            // Collect targets from form
+            const targetRows = document.querySelectorAll('.target-inputs');
+            const targets = [];
+            
+            console.log('Found target rows:', targetRows.length); // Debug log
+            
+            targetRows.forEach((row, index) => {
+                const targetPrice = row.querySelector('.target-price').value;
+                const alertType = row.querySelector('.alert-type').value;
+                const tolerance = row.querySelector('.tolerance').value;
+                
+                console.log(`Target ${index}:`, { targetPrice, alertType, tolerance }); // Debug log
+                
+                if (targetPrice && alertType && tolerance) {
+                    targets.push({
+                        target_price: parseFloat(targetPrice),
+                        alert_type: alertType,
+                        tolerance: parseFloat(tolerance)
+                    });
+                }
+            });
+            
+            console.log('Collected targets:', targets); // Debug log
+            
+            if (targets.length === 0) {
+                alert('Please add at least one target');
+                return;
+            }
+            
+            try {
+                let response;
+                const requestData = alertId ? 
+                    { targets } : 
+                    { 
+                        coin_id: coinId,
+                        coin_name: coinName,
+                        coin_symbol: coinSymbol,
+                        targets
+                    };
+                
+                console.log('Request data:', requestData); // Debug log
+                
+                if (alertId) {
+                    // Update existing alert
+                    response = await fetch(`/api/alerts/${alertId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                } else {
+                    // Create new alert
+                    response = await fetch('/api/alerts', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                }
+                
+                console.log('Response status:', response.status); // Debug log
+                
+                const data = await response.json();
+                console.log('Response data:', data); // Debug log
+                
+                if (response.ok) {
+                    alert('Alert saved successfully!');
+                    document.getElementById('alertModal').style.display = 'none';
+                    document.getElementById('searchResults').innerHTML = '';
+                    document.getElementById('coinSearch').value = '';
+                    loadAlerts(); // Refresh alerts list
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error saving alert:', error);
+                alert('An error occurred. Please try again.');
+            }
+        });
+
+        // Delete alert
+        const deleteAlert = async (id) => {
+            if (!confirm('Are you sure you want to delete this alert?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/alerts/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    loadAlerts(); // Refresh alerts list
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error deleting alert:', error);
+                alert('An error occurred. Please try again.');
+            }
+        };
+
         // Initial load
         loadAlerts();
-        loadCoins();
     </script>
 </body>
 </html>

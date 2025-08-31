@@ -181,14 +181,43 @@ app.get('/api/coins/search', authenticateToken, async (req, res) => {
   }
 });
 
-// Get user alerts
+// Get user alerts with their targets
 app.get('/api/alerts', authenticateToken, (req, res) => {
+  // First get all alerts
   db.all('SELECT * FROM alerts WHERE user_id = ? ORDER BY created_at DESC', [req.user.id], (err, alerts) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ message: 'Internal server error' });
     }
-    res.json(alerts);
+    
+    if (alerts.length === 0) {
+      return res.json([]);
+    }
+    
+    // Get targets for each alert
+    const alertPromises = alerts.map(alert => {
+      return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM alert_targets WHERE alert_id = ?', [alert.id], (err, targets) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({
+              ...alert,
+              targets: targets || []
+            });
+          }
+        });
+      });
+    });
+    
+    Promise.all(alertPromises)
+      .then(alertsWithTargets => {
+        res.json(alertsWithTargets);
+      })
+      .catch(error => {
+        console.error('Database error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+      });
   });
 });
 
@@ -210,41 +239,79 @@ app.get('/api/alerts/active', (req, res) => {
   });
 });
 
-// Create new alert
+// Create new alert with multiple targets
 app.post('/api/alerts', authenticateToken, (req, res) => {
-  const { coin_id, coin_name, coin_symbol, target_price, loss_limit, tolerance } = req.body;
+  const { coin_id, coin_name, coin_symbol, targets } = req.body;
   
-  if (!coin_id || !coin_name || !coin_symbol || !target_price || !tolerance) {
-    return res.status(400).json({ message: 'All required fields must be provided' });
+  if (!coin_id || !coin_name || !coin_symbol || !targets || !Array.isArray(targets) || targets.length === 0) {
+    return res.status(400).json({ message: 'Coin information and at least one target are required' });
   }
   
-  db.run('INSERT INTO alerts (user_id, coin_id, coin_name, coin_symbol, target_price, loss_limit, tolerance) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-    [req.user.id, coin_id, coin_name, coin_symbol, target_price, loss_limit || null, tolerance], 
+  // Create alert first
+  db.run('INSERT INTO alerts (user_id, coin_id, coin_name, coin_symbol, target_price, tolerance) VALUES (?, ?, ?, ?, ?, ?)', 
+    [req.user.id, coin_id, coin_name, coin_symbol, targets[0].target_price, targets[0].tolerance || 1.0], 
     function(err) {
       if (err) {
         console.error('Database error:', err);
         return res.status(500).json({ message: 'Internal server error' });
       }
       
-      // Get the newly created alert
-      db.get('SELECT * FROM alerts WHERE id = ?', [this.lastID], (err, newAlert) => {
-        if (err) {
-          console.error('Database error:', err);
-          return res.status(500).json({ message: 'Internal server error' });
-        }
-        
-        res.status(201).json({
-          message: 'Alert created successfully',
-          alert: newAlert
+      const alertId = this.lastID;
+      
+      // Insert all targets
+      const targetInserts = targets.map(target => {
+        return new Promise((resolve, reject) => {
+          db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance) VALUES (?, ?, ?, ?)',
+            [alertId, target.target_price, target.alert_type, target.tolerance || 1.0],
+            function(err) {
+              if (err) reject(err);
+              else resolve(this.lastID);
+            });
         });
       });
+      
+      Promise.all(targetInserts)
+        .then(() => {
+          // Get the newly created alert
+          db.get('SELECT * FROM alerts WHERE id = ?', [alertId], (err, newAlert) => {
+            if (err) {
+              console.error('Database error:', err);
+              return res.status(500).json({ message: 'Internal server error' });
+            }
+            
+            // Get targets for the new alert
+            db.all('SELECT * FROM alert_targets WHERE alert_id = ?', [alertId], (err, targets) => {
+              if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Internal server error' });
+              }
+              
+              res.status(201).json({
+                message: 'Alert created successfully',
+                alert: {
+                  ...newAlert,
+                  targets: targets || []
+                }
+              });
+            });
+          });
+        })
+        .catch(err => {
+          console.error('Error inserting targets:', err);
+          res.status(500).json({ message: 'Error creating alert targets' });
+        });
     });
 });
 
-// Update alert
+
+// Update alert with new targets
 app.put('/api/alerts/:id', authenticateToken, (req, res) => {
-  const { target_price, loss_limit, tolerance } = req.body;
+  const { targets } = req.body;
   const alertId = req.params.id;
+  
+  if (!targets || !Array.isArray(targets) || targets.length === 0) {
+    return res.status(400).json({ message: 'At least one target is required' });
+  }
   
   // Check if alert belongs to user
   db.get('SELECT * FROM alerts WHERE id = ? AND user_id = ?', [alertId, req.user.id], (err, existingAlert) => {
@@ -257,28 +324,105 @@ app.put('/api/alerts/:id', authenticateToken, (req, res) => {
       return res.status(404).json({ message: 'Alert not found' });
     }
     
-    // Reset notification flags when editing and update alert
-    db.run('UPDATE alerts SET target_price = ?, loss_limit = ?, tolerance = ?, profit_triggered = 0, loss_triggered = 0, is_triggered = 0, is_active = 1 WHERE id = ? AND user_id = ?', 
-      [target_price, loss_limit || null, tolerance, alertId, req.user.id], 
-      (err) => {
+    // Delete existing targets
+    db.run('DELETE FROM alert_targets WHERE alert_id = ?', [alertId], (err) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      }
+      
+      // Insert new targets
+      const targetInserts = targets.map(target => {
+        return new Promise((resolve, reject) => {
+          db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance) VALUES (?, ?, ?, ?)',
+            [alertId, target.target_price, target.alert_type, target.tolerance || 1.0],
+            function(err) {
+              if (err) reject(err);
+              else resolve(this.lastID);
+            });
+        });
+      });
+      
+      Promise.all(targetInserts)
+        .then(() => {
+          // Update main alert
+          db.run('UPDATE alerts SET target_price = ?, tolerance = ?, is_active = 1 WHERE id = ?', 
+            [targets[0].target_price, targets[0].tolerance || 1.0, alertId], 
+            (err) => {
+              if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Internal server error' });
+              }
+              
+              res.json({ message: 'Alert updated successfully' });
+            });
+        })
+        .catch(err => {
+          console.error('Error updating targets:', err);
+          res.status(500).json({ message: 'Error updating alert targets' });
+        });
+    });
+  });
+});
+
+// Add target to existing alert
+app.post('/api/alerts/:id/targets', authenticateToken, (req, res) => {
+  const { target_price, alert_type, tolerance } = req.body;
+  const alertId = req.params.id;
+  
+  if (!target_price || !alert_type) {
+    return res.status(400).json({ message: 'Target price and alert type are required' });
+  }
+  
+  // Check if alert belongs to user
+  db.get('SELECT * FROM alerts WHERE id = ? AND user_id = ?', [alertId, req.user.id], (err, existingAlert) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+    
+    if (!existingAlert) {
+      return res.status(404).json({ message: 'Alert not found' });
+    }
+    
+    db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance) VALUES (?, ?, ?, ?)',
+      [alertId, target_price, alert_type, tolerance || 1.0],
+      function(err) {
         if (err) {
           console.error('Database error:', err);
           return res.status(500).json({ message: 'Internal server error' });
         }
         
-        // Get the updated alert
-        db.get('SELECT * FROM alerts WHERE id = ?', [alertId], (err, updatedAlert) => {
-          if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({ message: 'Internal server error' });
-          }
-          
-          res.json({
-            message: 'Alert updated successfully',
-            alert: updatedAlert
-          });
+        res.status(201).json({
+          message: 'Target added successfully',
+          target_id: this.lastID
         });
       });
+  });
+});
+
+// Delete specific target
+app.delete('/api/alerts/:alertId/targets/:targetId', authenticateToken, (req, res) => {
+  const { alertId, targetId } = req.params;
+  
+  // Check if alert belongs to user
+  db.get('SELECT * FROM alerts WHERE id = ? AND user_id = ?', [alertId, req.user.id], (err, existingAlert) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+    
+    if (!existingAlert) {
+      return res.status(404).json({ message: 'Alert not found' });
+    }
+    
+    db.run('DELETE FROM alert_targets WHERE id = ? AND alert_id = ?', [targetId, alertId], (err) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      }
+      res.json({ message: 'Target deleted successfully' });
+    });
   });
 });
 

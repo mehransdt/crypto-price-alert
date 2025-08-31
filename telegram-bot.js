@@ -82,7 +82,7 @@ bot.on('message', (msg) => {
 });
 
 // Function to send alert message
-const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, currentPrice, tolerance, alertType = 'profit') => {
+const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, currentPrice, tolerance, alertType = 'profit target') => {
   return new Promise((resolve, reject) => {
     db.get('SELECT telegram_chat_id FROM user_settings WHERE user_id = ?', [userId], (err, settings) => {
       if (err) {
@@ -96,8 +96,18 @@ const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, curre
       }
       
       const changePercent = ((currentPrice - targetPrice) / targetPrice * 100).toFixed(2);
-      const alertTypeText = alertType === 'profit' ? 'حد سود' : 'حد ضرر';
-      const alertIcon = alertType === 'profit' ? '📈' : '📉';
+      
+      // Map alert types to Persian text and icons
+      const alertTypeMap = {
+        'profit target': { text: 'هدف سود', icon: '📈' },
+        'loss limit': { text: 'حد ضرر', icon: '📉' },
+        'watch market': { text: 'نظارت بازار', icon: '👀' },
+        'target raised': { text: 'افزایش هدف', icon: '⬆️' },
+        'market down': { text: 'کاهش بازار', icon: '⬇️' },
+        'market up': { text: 'افزایش بازار', icon: '⬆️' }
+      };
+      
+      const alertInfo = alertTypeMap[alertType] || { text: alertType, icon: '🔔' };
       
       const message = `
 🚨 *هشدار قیمت ارز دیجیتال*
@@ -106,8 +116,8 @@ const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, curre
 💰 *قیمت فعلی:* $${currentPrice}
 🎯 *قیمت هدف:* $${targetPrice}
 📊 *درصد تغییر:* ${changePercent}%
-${alertIcon} *نوع هشدار:* ${alertTypeText}
-📈 *وضعیت:* قیمت به ${alertTypeText} رسید
+${alertInfo.icon} *نوع هشدار:* ${alertInfo.text}
+📈 *وضعیت:* قیمت به ${alertInfo.text} رسید
 
 ⏰ زمان: ${new Date().toLocaleString('fa-IR')}
       `;

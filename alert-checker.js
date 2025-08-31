@@ -15,22 +15,34 @@ const isPriceWithinTolerance = (currentPrice, targetPrice, tolerance) => {
 const checkAlerts = async () => {
   console.log('Checking active alerts...');
   
-  // Get all active alerts
-  db.all(`
-    SELECT a.*, u.username, us.telegram_username 
-    FROM alerts a 
-    JOIN users u ON a.user_id = u.id 
-    LEFT JOIN user_settings us ON a.user_id = us.user_id 
-    WHERE a.is_active = 1
-  `, [], async (err, alerts) => {
-    if (err) {
-      console.error('Database error:', err);
-      return;
-    }
+  try {
+    // Get all active alerts first
+    const alerts = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM alerts WHERE is_active = 1', [], (err, alerts) => {
+        if (err) reject(err);
+        else resolve(alerts || []);
+      });
+    });
+    
+    console.log(`Found ${alerts.length} active alerts`);
     
     // Process each alert
     for (const alert of alerts) {
       try {
+        // Get targets for this alert
+        const targets = await new Promise((resolve, reject) => {
+          db.all('SELECT * FROM alert_targets WHERE alert_id = ? AND is_triggered = 0', [alert.id], (err, targets) => {
+            if (err) reject(err);
+            else resolve(targets || []);
+          });
+        });
+        
+        if (targets.length === 0) {
+          continue; // No active targets for this alert
+        }
+        
+        console.log(`Checking ${targets.length} targets for ${alert.coin_name}`);
+        
         // Get current price
         const currentPrice = await getCoinPrice(alert.coin_id);
         
@@ -39,88 +51,69 @@ const checkAlerts = async () => {
           continue;
         }
         
-        let alertTriggered = false;
-        
-        // Check profit target (if not already triggered)
-        if (!alert.profit_triggered && isPriceWithinTolerance(currentPrice, alert.target_price, alert.tolerance)) {
-          console.log(`Profit target triggered for ${alert.coin_name} (${alert.coin_symbol})`);
+        // Check each target
+        for (const target of targets) {
+          let shouldTrigger = false;
           
-          // Send Telegram alert for profit target
-          try {
-            await sendAlertMessage(
-              alert.user_id,
-              alert.coin_name,
-              alert.coin_symbol,
-              alert.target_price,
-              currentPrice,
-              alert.tolerance,
-              'profit'
-            );
-            console.log(`Telegram profit alert sent for alert ${alert.id}`);
-          } catch (error) {
-            console.error(`Error sending Telegram profit alert for alert ${alert.id}:`, error.message);
+          // Check different alert types
+          switch (target.alert_type) {
+            case 'profit target':
+              shouldTrigger = currentPrice >= target.target_price * (1 - target.tolerance / 100);
+              break;
+            case 'loss limit':
+              shouldTrigger = currentPrice <= target.target_price * (1 + target.tolerance / 100);
+              break;
+            case 'watch market':
+              shouldTrigger = isPriceWithinTolerance(currentPrice, target.target_price, target.tolerance);
+              break;
+            case 'target raised':
+              shouldTrigger = currentPrice >= target.target_price;
+              break;
+            case 'market down':
+              shouldTrigger = currentPrice <= target.target_price;
+              break;
+            case 'market up':
+              shouldTrigger = currentPrice >= target.target_price;
+              break;
           }
           
-          // Mark profit target as triggered
-          db.run('UPDATE alerts SET profit_triggered = 1 WHERE id = ?', [alert.id], (err) => {
-            if (err) {
-              console.error('Error updating profit alert status:', err);
-            } else {
-              console.log(`Profit alert ${alert.id} marked as triggered`);
+          if (shouldTrigger) {
+            console.log(`${target.alert_type} triggered for ${alert.coin_name} (${alert.coin_symbol}) at $${currentPrice}`);
+            
+            // Send Telegram alert
+            try {
+              await sendAlertMessage(
+                alert.user_id,
+                alert.coin_name,
+                alert.coin_symbol,
+                target.target_price,
+                currentPrice,
+                target.tolerance,
+                target.alert_type
+              );
+              console.log(`Telegram alert sent for target ${target.id}`);
+            } catch (error) {
+              console.error(`Error sending Telegram alert for target ${target.id}:`, error.message);
             }
-          });
-          
-          alertTriggered = true;
-        }
-        
-        // Check loss limit (if not already triggered and loss_limit is set)
-        if (!alert.loss_triggered && alert.loss_limit && isPriceWithinTolerance(currentPrice, alert.loss_limit, alert.tolerance)) {
-          console.log(`Loss limit triggered for ${alert.coin_name} (${alert.coin_symbol})`);
-          
-          // Send Telegram alert for loss limit
-          try {
-            await sendAlertMessage(
-              alert.user_id,
-              alert.coin_name,
-              alert.coin_symbol,
-              alert.loss_limit,
-              currentPrice,
-              alert.tolerance,
-              'loss'
-            );
-            console.log(`Telegram loss alert sent for alert ${alert.id}`);
-          } catch (error) {
-            console.error(`Error sending Telegram loss alert for alert ${alert.id}:`, error.message);
+            
+            // Mark target as triggered
+            db.run('UPDATE alert_targets SET is_triggered = 1, triggered_at = CURRENT_TIMESTAMP WHERE id = ?', [target.id], (err) => {
+              if (err) {
+                console.error('Error updating target status:', err);
+              } else {
+                console.log(`Target ${target.id} marked as triggered`);
+              }
+            });
           }
-          
-          // Mark loss limit as triggered
-          db.run('UPDATE alerts SET loss_triggered = 1 WHERE id = ?', [alert.id], (err) => {
-            if (err) {
-              console.error('Error updating loss alert status:', err);
-            } else {
-              console.log(`Loss alert ${alert.id} marked as triggered`);
-            }
-          });
-          
-          alertTriggered = true;
-        }
-        
-        // If both targets are triggered, deactivate the alert
-        if (alert.profit_triggered && alert.loss_triggered) {
-          db.run('UPDATE alerts SET is_active = 0 WHERE id = ?', [alert.id], (err) => {
-            if (err) {
-              console.error('Error deactivating alert:', err);
-            } else {
-              console.log(`Alert ${alert.id} deactivated - both targets triggered`);
-            }
-          });
         }
         
       } catch (error) {
         console.error(`Error processing alert ${alert.id}:`, error.message);
       }
     }
-  });
+  } catch (error) {
+    console.error('Error in checkAlerts:', error);
+  }
 };
 
 // Start alert checking interval (every 5 minutes)

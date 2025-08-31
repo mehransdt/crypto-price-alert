@@ -70,6 +70,21 @@ const initDatabase = () => {
       )
     `);
     
+    // Create alert_targets table for multiple target prices per alert
+    db.run(`
+      CREATE TABLE IF NOT EXISTS alert_targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        alert_id INTEGER NOT NULL,
+        target_price REAL NOT NULL,
+        alert_type TEXT NOT NULL CHECK (alert_type IN ('profit target', 'loss limit', 'watch market', 'target raised', 'market down', 'market up')),
+        tolerance REAL NOT NULL DEFAULT 1.0,
+        is_triggered BOOLEAN DEFAULT 0,
+        triggered_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (alert_id) REFERENCES alerts (id) ON DELETE CASCADE
+      )
+    `);
+    
     // Add new columns if they don't exist (for existing databases)
     db.run(`
       ALTER TABLE alerts ADD COLUMN loss_limit REAL

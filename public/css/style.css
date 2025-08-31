@@ -187,16 +187,19 @@ button:hover {
 }
 
 /* Dashboard */
-.dashboard-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+.coin-search-section {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
 }
 
-@media (max-width: 768px) {
-    .dashboard-content {
-        grid-template-columns: 1fr;
-    }
+.coin-search-section h2 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
 }
 
 .search-container {
@@ -225,21 +228,44 @@ button:hover {
     background-color: #2980b9;
 }
 
-.alerts-section, .coins-section {
+.search-results {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.alerts-main-section {
     background: #fff;
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-.alerts-section h2, .coins-section h2 {
+.alerts-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 20px;
+}
+
+.alerts-header h2 {
     color: #2c3e50;
     border-bottom: 2px solid #3498db;
     padding-bottom: 10px;
+    margin: 0;
 }
 
-.alerts-list, .coins-list {
+.alerts-search-container {
+    flex: 0 0 300px;
+}
+
+.alerts-search-container input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.alerts-list {
     display: flex;
     flex-direction: column;
     gap: 15px;
@@ -248,7 +274,7 @@ button:hover {
 .alert-item, .coin-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding: 15px;
     border: 1px solid #eee;
     border-radius: 6px;
@@ -265,23 +291,163 @@ button:hover {
     color: #27ae60;
 }
 
-.alert-info h3, .coin-info h3 {
-    color: #2c3e50;
-    margin-bottom: 5px;
+.alert-info {
+    flex: 1;
 }
 
-.alert-info p, .coin-info p {
+.alert-info h3, .coin-info h3 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.targets-display {
+    margin: 10px 0;
+}
+
+.targets-display .target-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 5px 0;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #3498db;
+}
+
+.targets-display .target-row.triggered {
+    border-left-color: #27ae60;
+    background-color: #e8f5e8;
+}
+
+.target-info {
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.trigger-time {
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+.alert-status {
     color: #7f8c8d;
     font-size: 14px;
+    margin-top: 10px;
 }
 
 .alert-actions {
     display: flex;
     gap: 10px;
+    flex-direction: column;
 }
 
 .coin-info {
     flex-grow: 1;
+}
+
+.no-alerts {
+    text-align: center;
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 40px 20px;
+}
+
+/* Target Management in Modal */
+.targets-section {
+    margin: 20px 0;
+}
+
+.targets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.targets-header label {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.btn-add-target {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-add-target:hover {
+    background-color: #219653;
+}
+
+.targets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.target-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 100px 40px;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+}
+
+.target-inputs input,
+.target-inputs select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.btn-remove-target {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-remove-target:hover {
+    background-color: #c0392b;
+}
+
+@media (max-width: 768px) {
+    .alerts-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+    
+    .alerts-search-container {
+        flex: 1;
+    }
+    
+    .target-inputs {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .alert-actions {
+        flex-direction: row;
+    }
 }
 
 /* Settings */
