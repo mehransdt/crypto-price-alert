@@ -57,23 +57,26 @@ const checkAlerts = async () => {
           
           // Check different alert types
           switch (target.alert_type) {
-            case 'profit target':
-              shouldTrigger = currentPrice >= target.target_price * (1 - target.tolerance / 100);
+            case 'Profit target':
+              shouldTrigger = currentPrice >= target.target_price * (1 - (target.tolerance || 1.0) / 100);
               break;
-            case 'loss limit':
-              shouldTrigger = currentPrice <= target.target_price * (1 + target.tolerance / 100);
+            case 'Loss limit':
+              shouldTrigger = currentPrice <= target.target_price * (1 + (target.tolerance || 1.0) / 100);
               break;
-            case 'watch market':
-              shouldTrigger = isPriceWithinTolerance(currentPrice, target.target_price, target.tolerance);
+            case 'Watch Market':
+              shouldTrigger = isPriceWithinTolerance(currentPrice, target.target_price, target.tolerance || 1.0);
               break;
-            case 'target raised':
-              shouldTrigger = currentPrice >= target.target_price;
+            case 'Target':
+              shouldTrigger = isPriceWithinTolerance(currentPrice, target.target_price, target.tolerance || 1.0);
               break;
-            case 'market down':
-              shouldTrigger = currentPrice <= target.target_price;
+            case 'Step buy':
+              shouldTrigger = currentPrice <= target.target_price * (1 + (target.tolerance || 1.0) / 100);
               break;
-            case 'market up':
-              shouldTrigger = currentPrice >= target.target_price;
+            case 'Step sell':
+              shouldTrigger = currentPrice >= target.target_price * (1 - (target.tolerance || 1.0) / 100);
+              break;
+            case 'custom':
+              shouldTrigger = isPriceWithinTolerance(currentPrice, target.target_price, target.tolerance || 1.0);
               break;
           }
           
@@ -89,7 +92,8 @@ const checkAlerts = async () => {
                 target.target_price,
                 currentPrice,
                 target.tolerance,
-                target.alert_type
+                target.alert_type,
+                target.description
               );
               console.log(`Telegram alert sent for target ${target.id}`);
             } catch (error) {

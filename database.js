@@ -70,20 +70,107 @@ const initDatabase = () => {
       )
     `);
     
-    // Create alert_targets table for multiple target prices per alert
+    // Check if alert_targets table exists and has the correct schema
+    db.get(`SELECT sql FROM sqlite_master WHERE type='table' AND name='alert_targets'`, (err, row) => {
+      if (err) {
+        console.error('Error checking alert_targets schema:', err);
+        return;
+      }
+      
+      // If table doesn't exist or has old constraint, recreate it
+      if (!row || row.sql.includes("'profit target'") || row.sql.includes("'loss limit'")) {
+        console.log('Migrating alert_targets table to new schema...');
+        
+        // Backup existing data
+        db.run(`CREATE TABLE IF NOT EXISTS alert_targets_backup AS SELECT * FROM alert_targets`, (err) => {
+          if (err && !err.message.includes('no such table')) {
+            console.error('Error backing up alert_targets:', err);
+          }
+          
+          // Drop old table
+          db.run(`DROP TABLE IF EXISTS alert_targets`, (err) => {
+            if (err) {
+              console.error('Error dropping old alert_targets table:', err);
+              return;
+            }
+            
+            // Create new table with correct schema
+            db.run(`
+              CREATE TABLE alert_targets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id INTEGER NOT NULL,
+                target_price REAL NOT NULL,
+                alert_type TEXT NOT NULL CHECK (alert_type IN ('Profit target', 'Loss limit', 'Watch Market', 'Target', 'Step buy', 'Step sell', 'custom')),
+                tolerance REAL DEFAULT 1.0,
+                description TEXT,
+                is_triggered BOOLEAN DEFAULT 0,
+                triggered_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (alert_id) REFERENCES alerts (id) ON DELETE CASCADE
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating new alert_targets table:', err);
+                return;
+              }
+              
+              // Restore data from backup if it exists, mapping only compatible columns
+              db.run(`INSERT INTO alert_targets (id, alert_id, target_price, alert_type, tolerance, is_triggered, triggered_at, created_at) 
+                      SELECT id, alert_id, target_price, 
+                             CASE 
+                               WHEN alert_type = 'profit target' THEN 'Profit target'
+                               WHEN alert_type = 'loss limit' THEN 'Loss limit'
+                               WHEN alert_type = 'watch market' THEN 'Watch Market'
+                               WHEN alert_type = 'target raised' THEN 'Target'
+                               WHEN alert_type = 'market down' THEN 'Step sell'
+                               WHEN alert_type = 'market up' THEN 'Step buy'
+                               ELSE 'custom'
+                             END as alert_type,
+                             COALESCE(tolerance, 1.0) as tolerance,
+                             is_triggered, triggered_at, created_at
+                      FROM alert_targets_backup 
+                      WHERE EXISTS (SELECT 1 FROM alert_targets_backup)`, (err) => {
+                if (err && !err.message.includes('no such table')) {
+                  console.error('Error restoring alert_targets data:', err);
+                } else {
+                  console.log('alert_targets table migration completed successfully');
+                }
+                
+                // Clean up backup table
+                db.run(`DROP TABLE IF EXISTS alert_targets_backup`, (err) => {
+                  if (err) {
+                    console.error('Error cleaning up backup table:', err);
+                  }
+                });
+              });
+            });
+          });
+        });
+      } else {
+        // Table exists with correct schema
+        console.log('alert_targets table schema is up to date');
+      }
+    });
+    
+    // Add description column to existing alert_targets table if it doesn't exist
     db.run(`
-      CREATE TABLE IF NOT EXISTS alert_targets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        alert_id INTEGER NOT NULL,
-        target_price REAL NOT NULL,
-        alert_type TEXT NOT NULL CHECK (alert_type IN ('profit target', 'loss limit', 'watch market', 'target raised', 'market down', 'market up')),
-        tolerance REAL NOT NULL DEFAULT 1.0,
-        is_triggered BOOLEAN DEFAULT 0,
-        triggered_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (alert_id) REFERENCES alerts (id) ON DELETE CASCADE
-      )
-    `);
+      ALTER TABLE alert_targets ADD COLUMN description TEXT
+    `, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Error adding description column:', err);
+      }
+    });
+    
+    // Update tolerance column to be nullable
+    db.run(`
+      ALTER TABLE alert_targets ADD COLUMN tolerance_new REAL DEFAULT 1.0
+    `, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        // Copy data from old tolerance column to new one
+        db.run(`UPDATE alert_targets SET tolerance_new = tolerance WHERE tolerance IS NOT NULL`);
+        // Note: SQLite doesn't support dropping columns easily, so we keep both for compatibility
+      }
+    });
     
     // Add new columns if they don't exist (for existing databases)
     db.run(`

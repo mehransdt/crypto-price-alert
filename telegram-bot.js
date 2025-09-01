@@ -82,7 +82,7 @@ bot.on('message', (msg) => {
 });
 
 // Function to send alert message
-const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, currentPrice, tolerance, alertType = 'profit target') => {
+const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, currentPrice, tolerance, alertType = 'Profit target', description = null) => {
   return new Promise((resolve, reject) => {
     db.get('SELECT telegram_chat_id FROM user_settings WHERE user_id = ?', [userId], (err, settings) => {
       if (err) {
@@ -99,25 +99,32 @@ const sendAlertMessage = async (userId, coinName, coinSymbol, targetPrice, curre
       
       // Map alert types to Persian text and icons
       const alertTypeMap = {
-        'profit target': { text: 'هدف سود', icon: '📈' },
-        'loss limit': { text: 'حد ضرر', icon: '📉' },
-        'watch market': { text: 'نظارت بازار', icon: '👀' },
-        'target raised': { text: 'افزایش هدف', icon: '⬆️' },
-        'market down': { text: 'کاهش بازار', icon: '⬇️' },
-        'market up': { text: 'افزایش بازار', icon: '⬆️' }
+        'Profit target': { text: 'هدف سود', icon: '📈' },
+        'Loss limit': { text: 'حد ضرر', icon: '📉' },
+        'Watch Market': { text: 'نظارت بازار', icon: '👀' },
+        'Target': { text: 'هدف', icon: '🎯' },
+        'Step buy': { text: 'خرید پلکانی', icon: '📊' },
+        'Step sell': { text: 'فروش پلکانی', icon: '📉' },
+        'custom': { text: 'سفارشی', icon: '🔧' }
       };
       
       const alertInfo = alertTypeMap[alertType] || { text: alertType, icon: '🔔' };
       
-      const message = `
+      let message = `
 🚨 *هشدار قیمت ارز دیجیتال*
 
 📊 *ارز:* ${coinName} (${coinSymbol.toUpperCase()})
 💰 *قیمت فعلی:* $${currentPrice}
 🎯 *قیمت هدف:* $${targetPrice}
 📊 *درصد تغییر:* ${changePercent}%
-${alertInfo.icon} *نوع هشدار:* ${alertInfo.text}
-📈 *وضعیت:* قیمت به ${alertInfo.text} رسید
+${alertInfo.icon} *نوع هشدار:* ${alertInfo.text}`;
+
+      // Add description if provided
+      if (description && description.trim()) {
+        message += `\n📝 *توضیحات:* ${description}`;
+      }
+
+      message += `\n📈 *وضعیت:* قیمت به ${alertInfo.text} رسید
 
 ⏰ زمان: ${new Date().toLocaleString('fa-IR')}
       `;

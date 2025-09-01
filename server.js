@@ -261,8 +261,8 @@ app.post('/api/alerts', authenticateToken, (req, res) => {
       // Insert all targets
       const targetInserts = targets.map(target => {
         return new Promise((resolve, reject) => {
-          db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance) VALUES (?, ?, ?, ?)',
-            [alertId, target.target_price, target.alert_type, target.tolerance || 1.0],
+          db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance, description) VALUES (?, ?, ?, ?, ?)',
+            [alertId, target.target_price, target.alert_type, target.tolerance || 1.0, target.description || null],
             function(err) {
               if (err) reject(err);
               else resolve(this.lastID);
@@ -334,8 +334,8 @@ app.put('/api/alerts/:id', authenticateToken, (req, res) => {
       // Insert new targets
       const targetInserts = targets.map(target => {
         return new Promise((resolve, reject) => {
-          db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance) VALUES (?, ?, ?, ?)',
-            [alertId, target.target_price, target.alert_type, target.tolerance || 1.0],
+          db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance, description) VALUES (?, ?, ?, ?, ?)',
+            [alertId, target.target_price, target.alert_type, target.tolerance || 1.0, target.description || null],
             function(err) {
               if (err) reject(err);
               else resolve(this.lastID);
@@ -367,7 +367,7 @@ app.put('/api/alerts/:id', authenticateToken, (req, res) => {
 
 // Add target to existing alert
 app.post('/api/alerts/:id/targets', authenticateToken, (req, res) => {
-  const { target_price, alert_type, tolerance } = req.body;
+  const { target_price, alert_type, tolerance, description } = req.body;
   const alertId = req.params.id;
   
   if (!target_price || !alert_type) {
@@ -385,8 +385,8 @@ app.post('/api/alerts/:id/targets', authenticateToken, (req, res) => {
       return res.status(404).json({ message: 'Alert not found' });
     }
     
-    db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance) VALUES (?, ?, ?, ?)',
-      [alertId, target_price, alert_type, tolerance || 1.0],
+    db.run('INSERT INTO alert_targets (alert_id, target_price, alert_type, tolerance, description) VALUES (?, ?, ?, ?, ?)',
+      [alertId, target_price, alert_type, tolerance || 1.0, description || null],
       function(err) {
         if (err) {
           console.error('Database error:', err);

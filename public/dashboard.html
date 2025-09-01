@@ -126,19 +126,22 @@
                 const targetsHtml = alert.targets.map(target => {
                     const statusIcon = target.is_triggered ? '✅' : '⏳';
                     const alertTypeMap = {
-                        'profit target': 'هدف سود',
-                        'loss limit': 'حد ضرر',
-                        'watch market': 'نظارت بازار',
-                        'target raised': 'افزایش هدف',
-                        'market down': 'کاهش بازار',
-                        'market up': 'افزایش بازار'
+                        'Profit target': 'هدف سود',
+                        'Loss limit': 'حد ضرر',
+                        'Watch Market': 'نظارت بازار',
+                        'Target': 'هدف',
+                        'Step buy': 'خرید پلکانی',
+                        'Step sell': 'فروش پلکانی',
+                        'custom': 'سفارشی'
                     };
                     const alertTypeText = alertTypeMap[target.alert_type] || target.alert_type;
+                    const toleranceText = target.tolerance ? `(±${target.tolerance}%)` : '';
+                    const descriptionText = target.description ? ` - ${target.description}` : '';
                     
                     return `
                         <div class="target-row ${target.is_triggered ? 'triggered' : ''}">
                             <span class="target-info">
-                                ${statusIcon} $${target.target_price} - ${alertTypeText} (±${target.tolerance}%)
+                                ${statusIcon} $${target.target_price} - ${alertTypeText} ${toleranceText}${descriptionText}
                             </span>
                             ${target.triggered_at ? `<span class="trigger-time">${new Date(target.triggered_at).toLocaleString('fa-IR')}</span>` : ''}
                         </div>
@@ -304,14 +307,16 @@
                 <div class="target-inputs">
                     <input type="number" class="target-price" placeholder="Target Price" step="0.01" value="${targetData.target_price}" required>
                     <select class="alert-type">
-                        <option value="profit target" ${targetData.alert_type === 'profit target' ? 'selected' : ''}>Profit Target</option>
-                        <option value="loss limit" ${targetData.alert_type === 'loss limit' ? 'selected' : ''}>Loss Limit</option>
-                        <option value="watch market" ${targetData.alert_type === 'watch market' ? 'selected' : ''}>Watch Market</option>
-                        <option value="target raised" ${targetData.alert_type === 'target raised' ? 'selected' : ''}>Target Raised</option>
-                        <option value="market down" ${targetData.alert_type === 'market down' ? 'selected' : ''}>Market Down</option>
-                        <option value="market up" ${targetData.alert_type === 'market up' ? 'selected' : ''}>Market Up</option>
+                        <option value="Profit target" ${targetData.alert_type === 'Profit target' ? 'selected' : ''}>Profit target</option>
+                        <option value="Loss limit" ${targetData.alert_type === 'Loss limit' ? 'selected' : ''}>Loss limit</option>
+                        <option value="Watch Market" ${targetData.alert_type === 'Watch Market' ? 'selected' : ''}>Watch Market</option>
+                        <option value="Target" ${targetData.alert_type === 'Target' ? 'selected' : ''}>Target</option>
+                        <option value="Step buy" ${targetData.alert_type === 'Step buy' ? 'selected' : ''}>Step buy</option>
+                        <option value="Step sell" ${targetData.alert_type === 'Step sell' ? 'selected' : ''}>Step sell</option>
+                        <option value="custom" ${targetData.alert_type === 'custom' ? 'selected' : ''}>custom</option>
                     </select>
-                    <input type="number" class="tolerance" placeholder="Tolerance %" step="0.1" min="0" max="100" value="${targetData.tolerance}" required>
+                    <input type="number" class="tolerance" placeholder="Tolerance % (optional)" step="0.1" min="0" max="100" value="${targetData.tolerance || ''}">
+                    <input type="text" class="description" placeholder="Description (optional)" value="${targetData.description || ''}">
                     <button type="button" class="btn-remove-target" data-index="${targetIndex}">×</button>
                 </div>
             `;
@@ -434,14 +439,16 @@
                 const targetPrice = row.querySelector('.target-price').value;
                 const alertType = row.querySelector('.alert-type').value;
                 const tolerance = row.querySelector('.tolerance').value;
+                const description = row.querySelector('.description').value;
                 
-                console.log(`Target ${index}:`, { targetPrice, alertType, tolerance }); // Debug log
+                console.log(`Target ${index}:`, { targetPrice, alertType, tolerance, description }); // Debug log
                 
-                if (targetPrice && alertType && tolerance) {
+                if (targetPrice && alertType) {
                     targets.push({
                         target_price: parseFloat(targetPrice),
                         alert_type: alertType,
-                        tolerance: parseFloat(tolerance)
+                        tolerance: tolerance ? parseFloat(tolerance) : 1.0,
+                        description: description || null
                     });
                 }
             });

@@ -392,7 +392,7 @@ button:hover {
 
 .target-inputs {
     display: grid;
-    grid-template-columns: 1fr 1fr 100px 40px;
+    grid-template-columns: 1fr 1fr 100px 2fr 40px;
     gap: 10px;
     align-items: center;
     padding: 10px;
@@ -490,7 +490,7 @@ button:hover {
     padding: 20px;
     border-radius: 8px;
     width: 90%;
-    max-width: 500px;
+    max-width: 700px;
     position: relative;
 }
 
